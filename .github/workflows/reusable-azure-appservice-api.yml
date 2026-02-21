@@ -1,0 +1,144 @@
+name: reusable-azure-appservice-api
+
+on:
+  workflow_call:
+    inputs:
+      project_path:
+        required: false
+        type: string
+        default: EcommerceApi/EcommerceApi.csproj
+      startup_project_path:
+        required: false
+        type: string
+        default: EcommerceApi
+      dotnet_version:
+        required: false
+        type: string
+        default: 10.0.x
+      build_configuration:
+        required: false
+        type: string
+        default: Release
+      run_tests:
+        required: false
+        type: boolean
+        default: false
+      resource_group:
+        required: true
+        type: string
+      webapp_name:
+        required: true
+        type: string
+      environment_name:
+        required: false
+        type: string
+        default: production
+    secrets:
+      AZURE_CLIENT_ID:
+        required: true
+      AZURE_TENANT_ID:
+        required: true
+      AZURE_SUBSCRIPTION_ID:
+        required: true
+      POSTGRES_CONNECTION_STRING:
+        required: true
+      JWT_ISSUER:
+        required: true
+      JWT_AUDIENCE:
+        required: true
+      JWT_KEY:
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ inputs.dotnet_version }}
+
+      - name: Restore
+        run: dotnet restore ${{ inputs.project_path }}
+
+      - name: Build
+        run: dotnet build ${{ inputs.project_path }} --configuration ${{ inputs.build_configuration }} --no-restore
+
+      - name: Test
+        if: ${{ inputs.run_tests }}
+        run: dotnet test ${{ inputs.project_path }} --configuration ${{ inputs.build_configuration }} --no-build
+
+      - name: Publish
+        run: dotnet publish ${{ inputs.project_path }} --configuration ${{ inputs.build_configuration }} --no-build --output ./artifacts/publish
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-publish
+          path: ./artifacts/publish
+
+  migrate-and-deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    environment: ${{ inputs.environment_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ inputs.dotnet_version }}
+
+      - name: Install dotnet-ef
+        run: |
+          dotnet tool install --global dotnet-ef --version 10.*
+          echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
+
+      - name: Apply EF Core migrations
+        env:
+          CONNECTION_STRING: ${{ secrets.POSTGRES_CONNECTION_STRING }}
+        run: |
+          dotnet ef database update \
+            --project ${{ inputs.project_path }} \
+            --startup-project ${{ inputs.startup_project_path }} \
+            --connection "$CONNECTION_STRING"
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Configure App Service settings
+        run: |
+          az webapp config appsettings set \
+            --resource-group ${{ inputs.resource_group }} \
+            --name ${{ inputs.webapp_name }} \
+            --settings \
+              ASPNETCORE_ENVIRONMENT=Production \
+              SeedDataOnStartup=false \
+              ConnectionStrings__DefaultConnection='${{ secrets.POSTGRES_CONNECTION_STRING }}' \
+              Jwt__Issuer='${{ secrets.JWT_ISSUER }}' \
+              Jwt__Audience='${{ secrets.JWT_AUDIENCE }}' \
+              Jwt__Key='${{ secrets.JWT_KEY }}'
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: api-publish
+          path: ./artifacts/publish
+
+      - name: Deploy to Azure App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ inputs.webapp_name }}
+          package: ./artifacts/publish

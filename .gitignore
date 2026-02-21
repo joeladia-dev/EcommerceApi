@@ -1,0 +1,51 @@
+# Build artifacts
+bin/
+obj/
+out/
+publish/
+artifacts/
+
+# User-specific files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# IDE folders/files
+.vs/
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Logs
+*.log
+logs/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# .NET local/dev secrets and certificates
+**/appsettings.Development.json
+**/secrets.json
+*.pfx
+*.snk
+
+# EF / tooling temp files
+*.dbmdl
+*.jfm
+
+# Test and coverage output
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+
+# Node (if added later for tooling/frontend)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Azure deployment local artifacts
+.azure/

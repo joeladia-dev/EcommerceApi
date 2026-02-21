@@ -1,0 +1,305 @@
+### Environment
+@dev_host = http://localhost:5170
+@staging_host = http://localhost:5170
+@prod_host = https://your-prod-host.example.com
+
+# Set the active host here
+@host = {{dev_host}}
+
+### Optional Auth
+# Set a token if your API uses auth
+@token = 
+# Authorization header is commented out by default; uncomment if needed
+# Authorization: Bearer {{token}}
+@categoryId = 1
+@productId = 1
+
+### Swagger UI
+GET {{host}}/swagger
+
+### Categories - Get all
+GET {{host}}/api/categories
+Accept: application/json
+
+### Categories - Get by id
+GET {{host}}/api/categories/{{categoryId}}
+Accept: application/json
+
+### Categories - Create
+POST {{host}}/api/categories
+Content-Type: application/json
+
+{
+	"name": "Sample Category"
+}
+
+### Categories - Update
+PUT {{host}}/api/categories/{{categoryId}}
+Content-Type: application/json
+
+{
+	"id": {{categoryId}},
+	"name": "Updated Sample Category"
+}
+
+### Categories - Delete
+DELETE {{host}}/api/categories/{{categoryId}}
+
+### Categories - Get products for category with filters
+GET {{host}}/api/categories/{{categoryId}}/products?page=1&pageSize=20&search=Pro&minPrice=10&maxPrice=200&sort=price
+Accept: application/json
+
+### Products - Get all with filters
+GET {{host}}/api/products?page=1&pageSize=20&search=Pro&categoryId={{categoryId}}&minPrice=10&maxPrice=200&sort=-price
+Accept: application/json
+
+### Products - Get by id
+GET {{host}}/api/products/{{productId}}
+Accept: application/json
+
+### Products - Create
+POST {{host}}/api/products
+Content-Type: application/json
+
+{
+	"name": "Sample Product",
+	"description": "Demo description",
+	"price": 19.99,
+	"stock": 50,
+	"categoryId": {{categoryId}}
+}
+
+### Products - Update
+PUT {{host}}/api/products/{{productId}}
+Content-Type: application/json
+
+{
+	"id": {{productId}},
+	"name": "Updated Sample Product",
+	"description": "Updated description",
+	"price": 24.99,
+	"stock": 40,
+	"categoryId": {{categoryId}}
+}
+
+### Products - Delete
+DELETE {{host}}/api/products/{{productId}}
+
+### Chained Flows
+
+### Create Category (chain)
+# @name createCategory
+POST {{host}}/api/categories
+Content-Type: application/json
+Authorization: Bearer {{login.response.body.$.token}}
+
+{
+	"name": "Chain Test Category"
+}
+
+### Get Created Category by captured id
+GET {{host}}/api/categories/{{createCategory.response.body.$.id}}
+Accept: application/json
+Authorization: Bearer {{login.response.body.$.token}}
+
+### Update Created Category
+PUT {{host}}/api/categories/{{createCategory.response.body.$.id}}
+Content-Type: application/json
+Authorization: Bearer {{login.response.body.$.token}}
+
+{
+	"id": {{createCategory.response.body.$.id}},
+	"name": "Chain Test Category Updated"
+}
+
+### Delete Created Category
+DELETE {{host}}/api/categories/{{createCategory.response.body.$.id}}
+Authorization: Bearer {{login.response.body.$.token}}
+
+### Create Product (chain)
+# @name createProduct
+POST {{host}}/api/products
+Content-Type: application/json
+Authorization: Bearer {{login.response.body.$.token}}
+
+{
+	"name": "Chain Test Product",
+	"description": "Created via chain",
+	"price": 25.99,
+	"stock": 15,
+	"categoryId": {{categoryId}}
+}
+
+### Get Created Product by captured id
+GET {{host}}/api/products/{{createProduct.response.body.$.id}}
+Accept: application/json
+Authorization: Bearer {{login.response.body.$.token}}
+
+### Update Created Product
+PUT {{host}}/api/products/{{createProduct.response.body.$.id}}
+Content-Type: application/json
+Authorization: Bearer {{login.response.body.$.token}}
+
+{
+	"id": {{createProduct.response.body.$.id}},
+	"name": "Chain Test Product Updated",
+	"description": "Updated via chain",
+	"price": 29.99,
+	"stock": 12,
+	"categoryId": {{categoryId}}
+}
+
+### Delete Created Product
+DELETE {{host}}/api/products/{{createProduct.response.body.$.id}}
+Authorization: Bearer {{login.response.body.$.token}}
+
+### Auth - Login to get JWT
+# @name login
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+	"username": "admin",
+	"password": "password_123"
+}
+
+### Auth - Login as non-admin user
+# @name loginUser
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+	"username": "user",
+	"password": "password_321"
+}
+
+### User token - Create Product (should succeed)
+POST {{host}}/api/products
+Content-Type: application/json
+Authorization: Bearer {{loginUser.response.body.$.token}}
+
+{
+	"name": "User Flow Product",
+	"description": "Created by non-admin",
+	"price": 15.99,
+	"stock": 10,
+	"categoryId": {{categoryId}}
+}
+
+### User token - Update Product (should succeed)
+PUT {{host}}/api/products/{{productId}}
+Content-Type: application/json
+Authorization: Bearer {{loginUser.response.body.$.token}}
+
+{
+	"id": {{productId}},
+	"name": "User Updated Product",
+	"description": "Updated by non-admin",
+	"price": 16.99,
+	"stock": 12,
+	"categoryId": {{categoryId}}
+}
+
+### User token - Delete Product (should be forbidden)
+DELETE {{host}}/api/products/{{productId}}
+Authorization: Bearer {{loginUser.response.body.$.token}}
+
+
+### Edge Cases
+
+### Categories - Get non-existent
+GET {{host}}/api/categories/999999
+Accept: application/json
+
+### Categories - Create invalid (empty name)
+POST {{host}}/api/categories
+Content-Type: application/json
+
+{
+	"name": ""
+}
+
+### Categories - Update invalid (ID mismatch)
+PUT {{host}}/api/categories/{{categoryId}}
+Content-Type: application/json
+
+{
+	"id": 999999,
+	"name": "Should Fail"
+}
+
+### Categories - Delete non-existent
+DELETE {{host}}/api/categories/999999
+
+### Products - Get with various sorts
+GET {{host}}/api/products?sort=name&page=1&pageSize=10
+Accept: application/json
+
+### Products - Get with descending name sort
+GET {{host}}/api/products?sort=-name&page=1&pageSize=10
+Accept: application/json
+
+### Products - Get with ascending price sort
+GET {{host}}/api/products?sort=price&page=1&pageSize=10
+Accept: application/json
+
+### Products - Pagination edge (page=0,pageSize=101 clamped)
+GET {{host}}/api/products?page=0&pageSize=101
+Accept: application/json
+
+### Products - Search example
+GET {{host}}/api/products?search=Pro
+Accept: application/json
+
+### Products - Create invalid (negative price)
+POST {{host}}/api/products
+Content-Type: application/json
+
+{
+	"name": "Invalid Price",
+	"description": "Should fail",
+	"price": -10,
+	"stock": 5,
+	"categoryId": {{categoryId}}
+}
+
+### Products - Create invalid (negative stock)
+POST {{host}}/api/products
+Content-Type: application/json
+
+{
+	"name": "Invalid Stock",
+	"description": "Should fail",
+	"price": 10,
+	"stock": -5,
+	"categoryId": {{categoryId}}
+}
+
+### Products - Create invalid (non-existent category)
+POST {{host}}/api/products
+Content-Type: application/json
+
+{
+	"name": "Bad Category",
+	"description": "Should fail",
+	"price": 10,
+	"stock": 5,
+	"categoryId": 999999
+}
+
+### Products - Update invalid (ID mismatch)
+PUT {{host}}/api/products/{{productId}}
+Content-Type: application/json
+
+{
+	"id": 999999,
+	"name": "Should Fail",
+	"description": "Mismatch",
+	"price": 10,
+	"stock": 5,
+	"categoryId": {{categoryId}}
+}
+
+### Products - Delete non-existent
+DELETE {{host}}/api/products/999999
+
