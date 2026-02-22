@@ -129,6 +129,24 @@ Use the provided HTTP file for quick testing:
 
 - `EcommerceApi/EcommerceApi.http`
 
+## Automated Tests
+
+Integration tests are located in:
+
+- `tests/EcommerceApi.ApiTests`
+
+Run only the API integration tests:
+
+```bash
+dotnet test tests/EcommerceApi.ApiTests/EcommerceApi.ApiTests.csproj
+```
+
+Run all tests in the solution:
+
+```bash
+dotnet test EcommerceApi.slnx
+```
+
 ## Deployment
 
 Azure App Service deployment docs are in:
