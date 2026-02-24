@@ -1,0 +1,57 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "value": "centralus"
+    },
+    "appServicePlanName": {
+      "value": "asp-ecommerceapi-prod"
+    },
+    "webAppName": {
+      "value": "app-ecommerceapi-prod"
+    },
+    "appServiceSkuName": {
+      "value": "F1"
+    },
+    "appServiceSkuCapacity": {
+      "value": 1
+    },
+    "linuxFxVersion": {
+      "value": "DOTNETCORE|10.0"
+    },
+    "postgresServerName": {
+      "value": "pg-ecommerceapi-prod"
+    },
+    "postgresAdminLogin": {
+      "value": "pgadmin"
+    },
+    "postgresAdminPassword": {
+      "value": "<set-secure-value-at-deploy-time>"
+    },
+    "postgresDatabaseName": {
+      "value": "ecommerce_prod"
+    },
+    "postgresSkuName": {
+      "value": "Standard_B1ms"
+    },
+    "postgresTier": {
+      "value": "Burstable"
+    },
+    "postgresAvailabilityZone": {
+      "value": -1
+    },
+    "postgresPublicNetworkAccess": {
+      "value": "Enabled"
+    },
+    "allowAzureServicesToPostgres": {
+      "value": true
+    },
+    "tags": {
+      "value": {
+        "app": "EcommerceApi",
+        "environment": "production"
+      }
+    }
+  }
+}

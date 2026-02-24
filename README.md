@@ -153,6 +153,11 @@ Azure App Service deployment docs are in:
 
 - `AZURE_DEPLOYMENT.md`
 
+Infrastructure as Code files are in:
+
+- `infra/main.bicep`
+- `infra/main.parameters.json`
+
 GitHub Actions workflows are in:
 
 - `.github/workflows/deploy-api.yml`

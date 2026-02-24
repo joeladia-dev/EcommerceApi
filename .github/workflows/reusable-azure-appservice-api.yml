@@ -11,6 +11,10 @@ on:
         required: false
         type: string
         default: EcommerceApi
+      test_project_path:
+        required: false
+        type: string
+        default: tests/EcommerceApi.ApiTests/EcommerceApi.ApiTests.csproj
       dotnet_version:
         required: false
         type: string
@@ -23,6 +27,10 @@ on:
         required: false
         type: boolean
         default: false
+      run_migrations:
+        required: false
+        type: boolean
+        default: true
       resource_group:
         required: true
         type: string
@@ -56,6 +64,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -73,7 +82,7 @@ jobs:
 
       - name: Test
         if: ${{ inputs.run_tests }}
-        run: dotnet test ${{ inputs.project_path }} --configuration ${{ inputs.build_configuration }} --no-build
+        run: dotnet test ${{ inputs.test_project_path }} --configuration ${{ inputs.build_configuration }} --no-build
 
       - name: Publish
         run: dotnet publish ${{ inputs.project_path }} --configuration ${{ inputs.build_configuration }} --no-build --output ./artifacts/publish
@@ -88,6 +97,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     environment: ${{ inputs.environment_name }}
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -103,6 +113,7 @@ jobs:
           echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
 
       - name: Apply EF Core migrations
+        if: ${{ inputs.run_migrations }}
         env:
           CONNECTION_STRING: ${{ secrets.POSTGRES_CONNECTION_STRING }}
         run: |
@@ -119,17 +130,23 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Configure App Service settings
+        env:
+          CONNECTION_STRING: ${{ secrets.POSTGRES_CONNECTION_STRING }}
+          JWT_ISSUER: ${{ secrets.JWT_ISSUER }}
+          JWT_AUDIENCE: ${{ secrets.JWT_AUDIENCE }}
+          JWT_KEY: ${{ secrets.JWT_KEY }}
         run: |
           az webapp config appsettings set \
             --resource-group ${{ inputs.resource_group }} \
             --name ${{ inputs.webapp_name }} \
             --settings \
               ASPNETCORE_ENVIRONMENT=Production \
+              ASPNETCORE_FORWARDEDHEADERS_ENABLED=true \
               SeedDataOnStartup=false \
-              ConnectionStrings__DefaultConnection='${{ secrets.POSTGRES_CONNECTION_STRING }}' \
-              Jwt__Issuer='${{ secrets.JWT_ISSUER }}' \
-              Jwt__Audience='${{ secrets.JWT_AUDIENCE }}' \
-              Jwt__Key='${{ secrets.JWT_KEY }}'
+              ConnectionStrings__DefaultConnection="$CONNECTION_STRING" \
+              Jwt__Issuer="$JWT_ISSUER" \
+              Jwt__Audience="$JWT_AUDIENCE" \
+              Jwt__Key="$JWT_KEY"
 
       - name: Download artifact
         uses: actions/download-artifact@v4

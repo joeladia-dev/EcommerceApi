@@ -1,0 +1,203 @@
+name: verify-deployed-api
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: Base URL of deployed API (no trailing slash)
+        required: false
+        default: https://app-ecommerceapi-prod.azurewebsites.net
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Endpoint verification suite
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          BASE_URL='${{ inputs.base_url }}'
+          BASE_URL="${BASE_URL%/}"
+
+          cat > verify.js <<'EOF'
+          const base = process.env.BASE_URL;
+          const results = [];
+
+          const authState = {
+            adminToken: null,
+            userToken: null,
+            authBroken: false,
+            createdCategoryId: null,
+            createdProductId: null
+          };
+
+          function addResult(method, endpoint, expected, actual, pass, note = '') {
+            results.push({ method, endpoint, expected, actual, pass, note });
+          }
+
+          async function sendRequest(method, endpoint, expected, body = undefined, token = null, authDependent = false) {
+            if (authDependent && authState.authBroken) {
+              addResult(method, endpoint, expected, 'SKIP', false, 'Skipped: auth token acquisition failed');
+              return { status: 'SKIP', json: null };
+            }
+
+            const headers = {};
+            if (body !== undefined) headers['Content-Type'] = 'application/json';
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
+            try {
+              const response = await fetch(`${base}${endpoint}`, {
+                method,
+                headers,
+                body: body === undefined ? undefined : JSON.stringify(body)
+              });
+
+              let payload = null;
+              const text = await response.text();
+              if (text) {
+                try { payload = JSON.parse(text); } catch { payload = text; }
+              }
+
+              const actual = response.status;
+              addResult(method, endpoint, expected, actual, actual === expected);
+              return { status: actual, json: payload };
+            } catch (error) {
+              addResult(method, endpoint, expected, 'ERROR', false, String(error?.message ?? error));
+              return { status: 'ERROR', json: null };
+            }
+          }
+
+          function extractToken(payload) {
+            if (!payload) return null;
+            if (typeof payload === 'object') {
+              if (payload.token) return payload.token;
+              if (payload.data && payload.data.token) return payload.data.token;
+            }
+            return null;
+          }
+
+          function extractDataId(payload) {
+            if (!payload || typeof payload !== 'object') return null;
+            if (payload.id) return payload.id;
+            if (payload.data && payload.data.id) return payload.data.id;
+            return null;
+          }
+
+          async function run() {
+            await sendRequest('GET', '/', 200);
+
+            const adminLogin = await sendRequest('POST', '/api/auth/login', 200, {
+              username: 'admin',
+              password: 'password_123'
+            });
+            authState.adminToken = extractToken(adminLogin.json);
+            if (!authState.adminToken) authState.authBroken = true;
+
+            const userLogin = await sendRequest('POST', '/api/auth/login', 200, {
+              username: 'user',
+              password: 'password_321'
+            });
+            authState.userToken = extractToken(userLogin.json);
+            if (!authState.userToken) authState.authBroken = true;
+
+            await sendRequest('GET', '/api/categories', 200);
+            await sendRequest('GET', '/api/products', 200);
+            await sendRequest('GET', '/api/categories/999999', 404);
+            await sendRequest('GET', '/api/products/999999', 404);
+            await sendRequest('POST', '/api/categories', 401, { name: 'NoAuthCategory' });
+            await sendRequest('POST', '/api/products', 401, { name: 'NoAuthProduct', price: 12.34, stock: 2 });
+
+            const createCategory = await sendRequest(
+              'POST',
+              '/api/categories',
+              201,
+              { name: `SmokeCat-${Date.now()}` },
+              authState.adminToken,
+              true
+            );
+
+            authState.createdCategoryId = extractDataId(createCategory.json);
+
+            if (authState.createdCategoryId) {
+              const id = authState.createdCategoryId;
+              await sendRequest('GET', `/api/categories/${id}`, 200);
+              await sendRequest('PUT', `/api/categories/${id}`, 200, { id, name: `SmokeCatUpdated-${Date.now()}` }, authState.adminToken, true);
+              await sendRequest('GET', `/api/categories/${id}/products`, 200);
+              await sendRequest('DELETE', `/api/categories/${id}`, 403, undefined, authState.userToken, true);
+              await sendRequest('DELETE', `/api/categories/${id}`, 200, undefined, authState.adminToken, true);
+            } else {
+              addResult('GET', '/api/categories/{id}', 200, 'SKIP', false, 'Skipped: category creation failed');
+              addResult('PUT', '/api/categories/{id}', 200, 'SKIP', false, 'Skipped: category creation failed');
+              addResult('GET', '/api/categories/{id}/products', 200, 'SKIP', false, 'Skipped: category creation failed');
+              addResult('DELETE', '/api/categories/{id} (user)', 403, 'SKIP', false, 'Skipped: category creation failed');
+              addResult('DELETE', '/api/categories/{id} (admin)', 200, 'SKIP', false, 'Skipped: category creation failed');
+            }
+
+            const createProduct = await sendRequest(
+              'POST',
+              '/api/products',
+              201,
+              {
+                name: `SmokeProd-${Date.now()}`,
+                description: 'Smoke test product',
+                price: 21.5,
+                stock: 5
+              },
+              authState.adminToken,
+              true
+            );
+
+            authState.createdProductId = extractDataId(createProduct.json);
+
+            if (authState.createdProductId) {
+              const id = authState.createdProductId;
+              await sendRequest('GET', `/api/products/${id}`, 200);
+              await sendRequest(
+                'PUT',
+                `/api/products/${id}`,
+                200,
+                { id, name: `SmokeProdUpdated-${Date.now()}`, description: 'Updated', price: 22.5, stock: 3 },
+                authState.adminToken,
+                true
+              );
+              await sendRequest('DELETE', `/api/products/${id}`, 403, undefined, authState.userToken, true);
+              await sendRequest('DELETE', `/api/products/${id}`, 200, undefined, authState.adminToken, true);
+            } else {
+              addResult('GET', '/api/products/{id}', 200, 'SKIP', false, 'Skipped: product creation failed');
+              addResult('PUT', '/api/products/{id}', 200, 'SKIP', false, 'Skipped: product creation failed');
+              addResult('DELETE', '/api/products/{id} (user)', 403, 'SKIP', false, 'Skipped: product creation failed');
+              addResult('DELETE', '/api/products/{id} (admin)', 200, 'SKIP', false, 'Skipped: product creation failed');
+            }
+
+            console.log('Verification Results');
+            for (const row of results) {
+              console.log(`${row.pass ? 'PASS' : 'FAIL'} | ${row.method.padEnd(6)} | ${String(row.expected).padEnd(4)} | ${String(row.actual).padEnd(6)} | ${row.endpoint}${row.note ? ` | ${row.note}` : ''}`);
+            }
+
+            const passed = results.filter(r => r.pass).length;
+            const failed = results.length - passed;
+            console.log(`Summary: total=${results.length}, passed=${passed}, failed=${failed}`);
+
+            const failedRows = results.filter(r => !r.pass);
+            if (failedRows.length > 0) {
+              console.log('Failed checks:');
+              for (const row of failedRows) {
+                console.log(`- ${row.method} ${row.endpoint} expected ${row.expected} got ${row.actual}${row.note ? ` (${row.note})` : ''}`);
+              }
+              process.exit(1);
+            }
+          }
+
+          run().catch(err => {
+            console.error(err);
+            process.exit(1);
+          });
+          EOF
+
+          BASE_URL="$BASE_URL" node verify.js

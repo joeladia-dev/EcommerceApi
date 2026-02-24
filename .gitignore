@@ -49,3 +49,14 @@ yarn-error.log*
 
 # Azure deployment local artifacts
 .azure/
+
+# Generated IaC output
+infra/main.json
+infra/*.local.parameters.json
+infra/*.private.parameters.json
+
+# Local Copilot/agent mode files
+.github/agents/
+
+# Temporary local secret/cache files
+.azure.postgres.password.txt
